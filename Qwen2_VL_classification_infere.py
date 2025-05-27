@@ -103,26 +103,23 @@ categories_file = {
 }
 
 
-# model path and model base
-model_path = ""
-model_base = ""  # original Qwen2-VL
 
 
-def run(rank, world_size,question, image_base_path, pth_file_path, categories_file):
+def run(rank, world_size, args):
     model = Qwen2VLForConditionalGeneration.from_pretrained(
-        model_path,
+        args.model_path,
         torch_dtype=torch.bfloat16,
         attn_implementation="flash_attention_2",
         device_map="cpu",
     )
     # processor = AutoProcessor.from_pretrained(ori_processor_path) 
-    processor = AutoProcessor.from_pretrained(model_base)
+    processor = AutoProcessor.from_pretrained(args.model_base)
 
     model = model.to(torch.device(rank))
     model = model.eval()
 
     ### get categories name
-    with open(categories_file, 'r') as file:
+    with open(args.categories_file, 'r') as file:
         lines = file.readlines()
     categories = []
     for line in lines:
@@ -131,8 +128,8 @@ def run(rank, world_size,question, image_base_path, pth_file_path, categories_fi
     print(categories)   ### 对应 0-101
 
     ### get validation data
-    predictions = torch.load(pth_file_path)
-    
+    predictions = torch.load(args.pth_file_path)
+    print
     val_set = []
     for item in predictions:
         for k,v in item.items():
@@ -156,15 +153,15 @@ def run(rank, world_size,question, image_base_path, pth_file_path, categories_fi
         ### 获取图片信息
         for k,v in image.items():
             image_path = k
-            image_path = image_base_path+image_path.split("/")[-1]
+            image_path = args.image_base_path+image_path.split("/")[-1]
             image_label = v
-        image_cate = categories[image_label]   
+        image_cate = categories[image_label]
         # plot_images([image_path])
     
 
     
         image_path = image_path
-        query = "<image>\n"+question
+        query = "<image>\n" + args.question
         # print(RED+query+RESET)
         
         messages = [
@@ -244,9 +241,9 @@ def main():
     else:
         assert any([args.question, args.image_base_path, args.pth_file_path, args.categories_file]), \
             "When --task is not specified, at least one of --question, --image_base_path, --pth_file_path, or --categories_file must be provided."
-    global model_path, model_base
-    model_path = args.model_path    #"/workspace/GPG/Visual-RFT/output/grpo/ViRFT_CLS_fgvc_aircraft_4_shot_Qwen2-VL-2B-Instruct_"
-    model_base = args.model_base
+    # global model_path, model_base
+    # model_path = args.model_path    #"/workspace/GPG/Visual-RFT/output/grpo/ViRFT_CLS_fgvc_aircraft_4_shot_Qwen2-VL-2B-Instruct_"
+    # model_base = args.model_base
 
     multiprocess = torch.cuda.device_count() >= 2
     mp.set_start_method('spawn')
@@ -255,7 +252,7 @@ def main():
         n_gpus = torch.cuda.device_count()
         world_size = n_gpus
         with Pool(world_size) as pool:
-            func = functools.partial(run, world_size=world_size, question = args.question, image_base_path = args.image_base_path, pth_file_path = args.pth_file_path, categories_file = args.categories_file)
+            func = functools.partial(run, world_size=world_size, args = args)
             result_lists = pool.map(func, range(world_size))
 
         global_count_error = 0
@@ -271,7 +268,7 @@ def main():
         n_gpus = torch.cuda.device_count()
         world_size = n_gpus
         with Pool(world_size) as pool:
-            func = functools.partial(run, world_size=world_size, question = args.question, image_base_path = args.image_base_path, pth_file_path = args.pth_file_path, categories_file = args.categories_file)
+            func = functools.partial(run, world_size=world_size, args = args)
             result_lists = pool.map(func, range(world_size))
 
         global_count_error = 0
